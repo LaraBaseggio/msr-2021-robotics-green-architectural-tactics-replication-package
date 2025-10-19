@@ -18,13 +18,28 @@ import sys
 
 github_limit = 2000
 
+##modified this code - PAT as env variable
+##  headers=urllib3.util.make_headers(basic_auth="XXXX" + ":" + "XXXXXX", user_agent="XXXXX"))
 def form_github_request(url):
-        time.sleep(3600/github_limit)
-        http = urllib3.PoolManager(ca_certs=certifi.where())
-        return http.request('GET',
-                                url,
-                                headers=urllib3.util.make_headers(basic_auth="XXXX" + ":" + "XXXXXX",
-                                                                user_agent="XXXXX"))
+    """GET request wrapper for GitHub API.
+
+    Uses the GITHUB_TOKEN environment variable for Authorization (if set).
+    Falls back to unauthenticated requests if the env var is not present.
+    """
+    time.sleep(3600/github_limit)
+    http = urllib3.PoolManager(ca_certs=certifi.where())
+
+    # Read token from environment
+    token = os.environ.get('GITHUB_TOKEN')
+
+    # Set a clear User-Agent (replace with your contact if desired)
+    ua = "phase1-data-collector/1.0"
+    headers = urllib3.util.make_headers(user_agent=ua)
+
+    if token:
+        headers['authorization'] = 'token ' + token
+
+    return http.request('GET', url, headers=headers)
 
 def form_bitbucket_request(url):
         http = urllib3.PoolManager(ca_certs=certifi.where())

@@ -1,45 +1,93 @@
 import scrapy
-from scrapy.spiders import CrawlSpider, Rule
-from scrapy.linkextractors import LinkExtractor
+import json
+import re
+from html import unescape
 from SOWebCrawler.items import SOItem
 
-class SOSpider(CrawlSpider):
+
+class SOSpider(scrapy.Spider):
     name = "stackoverflow"
-    #allowed_domains = ["www.olx.com.pk"]
-    start_urls = ['https://stackoverflow.com/questions/tagged/ros?tab=newest&pagesize=50']
+    allowed_domains = ["api.stackexchange.com"]
+    
+    # Stack Exchange API endpoint for newest questions tagged 'ros'
+    start_urls = [
+        "https://api.stackexchange.com/2.3/questions?order=desc&sort=creation&tagged=ros&site=stackoverflow&pagesize=50&filter=withbody"
+    ]
 
-    rules = (
-        Rule(LinkExtractor(allow=(), restrict_css=('.pager',)),
-             callback="parse_item",
-             follow=True),)
+    def parse(self, response):
+        data = json.loads(response.text)
+        questions = data.get('items', [])
 
-    def parse_item(self, response):
-        #print('Processing..' + response.url)
-        item_links = response.css('.question-hyperlink::attr(href)').extract()
-        for a in item_links:
-            yield scrapy.Request(response.urljoin(a), callback=self.parse_detail_page)
+        for q in questions:
+            item = SOItem()
+            item['title'] = unescape(q.get('title', ''))
+            item['time'] = q.get('creation_date')  # Unix timestamp
+            body = q.get('body', '')
 
-    def parse_detail_page(self, response):
-        print('parse_detail_page')
-        item = SOItem()
+            # Clean and extract data
+            item['post_content'] = [self.clean_html(body)]
+            item['question_code'] = self.extract_code(body)
+            item['quote'] = self.extract_quotes(body)
+            item['url'] = q.get('link')
 
-        title = response.css('.question-hyperlink::text').extract()[0].strip()
-        item['title'] = title
-        time = response.css('.user-action-time span::attr(title)').extract()[0].strip()
-        item['time'] = time
-        post_content = response.css('.question p::text').extract()
-        item['post_content'] = post_content
-        answer = response.css('.answer p::text').extract()
-        item['answer'] = answer
-        if response.css('blockquote > p::text').extract():
-            quote = response.css('blockquote > p::text').extract()
-            item['quote'] = quote
-        if response.css('.question code::text').extract():
-            question_code = response.css('.question code::text').extract()
-            item['question_code'] = question_code
-        if response.css('.answer code::text').extract():
-            answer_code = response.css('.answer code::text').extract()
-            item['answer_code'] = answer_code
+            # Fetch answers via API if any exist
+            if q.get('answer_count', 0) > 0:
+                answers_api = (
+                    f"https://api.stackexchange.com/2.3/questions/{q['question_id']}/answers"
+                    f"?order=desc&sort=creation&site=stackoverflow&filter=withbody"
+                )
+                yield scrapy.Request(
+                    answers_api,
+                    callback=self.parse_answers,
+                    meta={'item': item},
+                )
+            else:
+                item['answer'] = []
+                item['answer_code'] = []
+                yield item
 
-        item['url'] = response.url
+        # Pagination if more results exist
+        if data.get('has_more'):
+            next_page = int(response.url.split("&page=")[-1]) + 1 if "&page=" in response.url else 2
+            next_url = (
+                f"https://api.stackexchange.com/2.3/questions?"
+                f"order=desc&sort=creation&tagged=ros&site=stackoverflow"
+                f"&pagesize=50&page={next_page}&filter=withbody"
+            )
+            yield scrapy.Request(next_url, callback=self.parse)
+
+    def parse_answers(self, response):
+        """Parse answers for each question."""
+        item = response.meta['item']
+        data = json.loads(response.text)
+        answers = []
+        answer_codes = []
+
+        for ans in data.get('items', []):
+            body = ans.get('body', '')
+            answers.append(self.clean_html(body))
+            answer_codes.extend(self.extract_code(body))
+
+        item['answer'] = answers
+        item['answer_code'] = answer_codes
         yield item
+
+    # -------------------------------
+    # Helper methods
+    # -------------------------------
+    def clean_html(self, html_text):
+        """Remove HTML tags for clean text."""
+        cleanr = re.compile('<.*?>')
+        cleantext = re.sub(cleanr, '', html_text)
+        return unescape(cleantext.strip())
+
+    def extract_code(self, html_text):
+        """Extract all <code>...</code> blocks."""
+        return re.findall(r'<code>(.*?)</code>', html_text, re.DOTALL)
+
+    def extract_quotes(self, html_text):
+        """Extract all <blockquote>...</blockquote> sections."""
+        quotes = re.findall(r'<blockquote>(.*?)</blockquote>', html_text, re.DOTALL)
+        # Remove inner HTML tags inside blockquotes
+        cleaned_quotes = [self.clean_html(q) for q in quotes]
+        return cleaned_quotes
