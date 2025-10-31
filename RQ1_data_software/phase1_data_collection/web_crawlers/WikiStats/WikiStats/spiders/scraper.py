@@ -1,40 +1,47 @@
 import scrapy
 import json
-import re
 import os
-from scrapy.spiders import CrawlSpider, Rule
-from scrapy.linkextractors import LinkExtractor
-from WikiStats.items import WikiItem
+import re
+from WikiStats.items import WikiItem 
 
-class WikiSpider(scrapy.Spider):
-    name = "wiki"
-    spider_dir = os.path.dirname(os.path.abspath(__file__))
-    json_path = os.path.join(spider_dir, '../../../../data/wiki_new_data.json')
-    with open(json_path) as f:
-        url_data = json.load(f)
-    wiki_url = [item.get('url') for item in url_data]
-
-    start_urls = wiki_url
+class WikiStatsAPISpider(scrapy.Spider):
+    name = "wiki_stats"
+    allowed_domains = ["index.ros.org"]
+    
+    start_urls = ["https://index.ros.org/search/packages/data.humble.json"]
 
     def parse(self, response):
-        item = WikiItem()
+        """
+        Parses the JSON response from the ROS Index API and extracts 
+        url, last_commit_time, and authors.
+        """
+        try:
+            # Load the entire list of package data from the JSON API response
+            packages_data = json.loads(response.text)
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Failed to parse JSON from {response.url}: {e}")
+            return
 
-        item['url'] = response.url
+        self.logger.info(f"Successfully loaded {len(packages_data)} package entries.")
 
-        e_time = response.css('p.info::text').extract_first()
-        time = re.search('edited(.*)by', e_time)
-        time = time.group(1)
-        time = time.strip()
-        item['time'] = time
-        print(time)
+        for data in packages_data:
+            item = WikiItem()
+            
+            url_path = data.get('url', '')
+            url_path_clean = url_path.split('#')[0]
+            item['url'] = f"https://index.ros.org{url_path_clean}"
+            
+            item['time'] = data.get('last_commit_time', 'N/A')
 
-        e_user = response.css('p.info a::attr(href)')[-1].extract()
-        user = e_user[1:]
-        item['user'] = user
-        print(user)
-        
-        yield item
-
-#url 
-#time: Last Updated	
-#user: "Authors"
+            authors_data = data.get('authors')
+            
+            if isinstance(authors_data, list):
+                authors = ", ".join(authors_data)
+            elif isinstance(authors_data, str):
+                authors = authors_data
+            else:
+                authors = 'N/A'
+                
+            item['user'] = authors
+            
+            yield item
