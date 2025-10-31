@@ -1,6 +1,7 @@
 import scrapy
 import json
 import re
+import os
 from ROSAStats.items import RosaItem
 
 class RosaBatchSpider(scrapy.Spider):
@@ -8,7 +9,7 @@ class RosaBatchSpider(scrapy.Spider):
     allowed_domains = ["api.stackexchange.com"]
 
     API_KEY = "rl_u8yNRWLcWXZVUvFgQCyGt7GMy"
-    MAX_BATCH_SIZE = 100  # Max IDs per request allowed by SE API
+    MAX_BATCH_SIZE = 100 
 
     custom_settings = {
         "DOWNLOAD_DELAY": 0.5,
@@ -28,10 +29,14 @@ class RosaBatchSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
 
         # Load URLs from JSON
-        self.json_path = "../../../../data/rosa_new_data.json"
-        with open(self.json_path, "r") as f:
-            url_data = [json.loads(line) for line in f if line.strip()]
-        all_urls = [item.get("url") for item in url_data if item.get("url")]
+        spider_dir = os.path.dirname(os.path.abspath(__file__))
+        json_path = os.path.join(spider_dir, '../../../../data/rosa_new_data.json')
+        
+        # This fix is critical for reading the standard array format JSON
+        with open(json_path, "r") as f:
+            url_data = json.load(f)
+            
+        all_urls = [item.get("url") for item in url_data if item and item.get("url")]
 
         # Extract question IDs
         self.question_ids = []
@@ -39,6 +44,9 @@ class RosaBatchSpider(scrapy.Spider):
             match = re.search(r"/questions/(\d+)", url) or re.search(r"/question/(\d+)", url)
             if match:
                 self.question_ids.append((match.group(1), url))
+
+        # Initialize list to track missing question IDs
+        self.all_missing_ids = []  # <--- CORRECTLY INITIALIZED
 
         # Prepare batches
         self.batches = [
@@ -49,9 +57,13 @@ class RosaBatchSpider(scrapy.Spider):
     def start_requests(self):
         for batch in self.batches:
             ids_str = ";".join([qid for qid, _ in batch])
-            url = f"https://api.stackexchange.com/2.3/questions/{ids_str}?order=desc&sort=creation&site=robotics&filter=withbody"
+            
+            # FIX APPLIED: Added &pagesize=100 to the request URL
+            url = f"https://api.stackexchange.com/2.3/questions/{ids_str}?order=desc&sort=creation&site=robotics&filter=withbody&pagesize=100"
+            
             if self.API_KEY:
                 url += f"&key={self.API_KEY}"
+                
             yield scrapy.Request(url, callback=self.parse, meta={"batch": batch})
 
     def parse(self, response):
@@ -67,20 +79,35 @@ class RosaBatchSpider(scrapy.Spider):
         batch = response.meta["batch"]
         questions = data.get("items", [])
 
-        returned_ids = set()
-        for question in questions:
-            qid = str(question.get("question_id"))
-            returned_ids.add(qid)
-            url = next((u for i, u in batch if i == qid), "")
-            user = question.get("owner", {}).get("display_name", "")
+        questions_by_id = {str(q.get("question_id")): q for q in questions}
 
-            item = RosaItem()
-            item["url"] = url
-            item["user"] = user
-            yield item
+        for qid, url in batch:
+            if qid in questions_by_id:
+                question = questions_by_id[qid]
+                user = question.get("owner", {}).get("display_name", "")
+                
+                item = RosaItem()
+                item["url"] = url
+                item["user"] = user
+                yield item
+            else:
+                # Track missing question
+                self.all_missing_ids.append({"question_id": qid, "url": url})
 
-        # Optionally log missing/deleted questions
-        original_ids = {qid for qid, _ in batch}
-        missing_ids = original_ids - returned_ids
-        if missing_ids:
-            self.logger.warning(f"Skipped {len(missing_ids)} missing/deleted questions in batch")
+        missing_count = len(batch) - len(questions_by_id)
+        if missing_count > 0:
+            self.logger.warning(f"Skipped {missing_count} missing/deleted questions in this batch")
+
+    def closed(self, reason):
+        """Called when spider is closed - save missing IDs to file"""
+        if self.all_missing_ids:
+            spider_dir = os.path.dirname(os.path.abspath(__file__))
+            output_path = os.path.join(spider_dir, '../../../../data/missing_questions.json')
+            
+            # Ensure the output directory exists before writing
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            with open(output_path, 'w') as f:
+                json.dump(self.all_missing_ids, f, indent=2)
+            
+            self.logger.info(f"Saved {len(self.all_missing_ids)} missing question IDs to {output_path}")
