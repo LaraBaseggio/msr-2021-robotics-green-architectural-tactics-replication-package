@@ -1,13 +1,16 @@
 import scrapy
 import json
 import re
+import os
 from scrapy.spiders import CrawlSpider, Rule
 from scrapy.linkextractors import LinkExtractor
 from WikiStats.items import WikiItem
 
-class WikiSpider(CrawlSpider):
+class WikiSpider(scrapy.Spider):
     name = "wiki"
-    with open('../../../../data/wiki_data.json') as f:
+    spider_dir = os.path.dirname(os.path.abspath(__file__))
+    json_path = os.path.join(spider_dir, '../../../../data/wiki_new_data.json')
+    with open(json_path) as f:
         url_data = json.load(f)
     wiki_url = [item.get('url') for item in url_data]
 
@@ -31,3 +34,7 @@ class WikiSpider(CrawlSpider):
         print(user)
         
         yield item
+
+#url 
+#time: Last Updated	
+#user: "Authors"

@@ -1,27 +1,22 @@
 import scrapy
-from scrapy.spiders import CrawlSpider, Rule
-from scrapy.linkextractors import LinkExtractor
+import json
 from WikiURL.items import WikiItem
 
-class WikiSpider(CrawlSpider):
+"""
+Old start_url was expired, new url: https://index.ros.org/?search_packages=true/page/1/time
+Instead of fetching data using Playwright (first solution I tried), fetch data using the API found in Network -> Fetch/XHR
+"""
+class WikiSpider(scrapy.Spider):
     name = "wikiurl"
-    start_urls = ['https://index.ros.org/packages/page/1/time/']
+    allowed_domains = ["index.ros.org"]
+    start_urls = ["https://index.ros.org/search/packages/data.humble.json"]
 
-    rules = (
-        Rule(LinkExtractor(allow=(), restrict_css=('ul.pagination.pagination-sm',)),
-             callback="parse_item",
-             follow=True),)
-
-    def parse_item(self, response):
-        new_urls = []
-        print('Processing..' + response.url)
-        item = WikiItem()
-        item_links = response.css('.table-responsive > table.table.table-condensed.table-striped.table-hover > tbody > tr > td a::attr(href)').extract()
-        for link in item_links:
-            new_link = link.rsplit('/', 1)[-1]
-            print(new_link)
-            new_urls.append(new_link)
-        new_urls = list(set(new_urls))
-        for link in new_urls:
-            item['urls'] = link
+    def parse(self, response):
+        data = json.loads(response.text)
+        
+        print(f"Total packages found: {len(data)}")
+        
+        for package in data:
+            item = WikiItem()
+            item["urls"] = package.get('url', '')
             yield item

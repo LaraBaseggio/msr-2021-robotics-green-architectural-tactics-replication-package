@@ -3,92 +3,90 @@ import json
 from scrapy.spiders import CrawlSpider
 from ROSDWebCrawler.items import ROSDItem
 
+"""
+Old code used to fetch: https://discourse.ros.org
+This url has been modified -> redirected to https://discourse.openrobotics.org/
+
+Old code: hardcoded 21 different categories
+New code: changed all urls to the new categories/subcategories 
+"""
 
 class ROSDSpider(CrawlSpider):
-  name = "ros-discourse"
-  # general fallback URL
-  start_urls = ["https://discourse.openrobotics.org"]
+    name = "ros-discourse"
+    start_urls = ["https://discourse.openrobotics.org"]
 
-  def __init__(self, category_slug: str = "ng-ros", *args, **kwargs):
-    """Allow selecting a category by slug at crawl time.
+    # Updated category URLs to crawl
+    category_urls = [
+        'https://discourse.openrobotics.org/c/archive/humanoids/35',
+        'https://discourse.openrobotics.org/c/archive/robot-description-formats/7',
+        'https://discourse.openrobotics.org/c/archive/ariac-users/24',
+        'https://discourse.openrobotics.org/c/community-groups/marine-robotics/36',
+        'https://discourse.openrobotics.org/c/community-groups/aerial-robotics/14',
+        'https://discourse.openrobotics.org/c/turtlebot/12',
+        'https://discourse.openrobotics.org/c/archive/perception/30',
+        'https://discourse.openrobotics.org/c/community-groups/industrial/39',
+        'https://discourse.openrobotics.org/c/archive/drivers/54',
+        'https://discourse.openrobotics.org/c/infrastructure-project/infra-buildfarm/20',
+        'https://discourse.openrobotics.org/c/archive/quality/37',
+        'https://discourse.openrobotics.org/c/ros/release/16',
+        'https://discourse.openrobotics.org/c/archive/embedded/9',
+        'https://discourse.openrobotics.org/c/archive/multi-robot-systems/60',
+        'https://discourse.openrobotics.org/c/community-groups/openembedded/26',
+        'https://discourse.openrobotics.org/c/community-groups/manipulation/13',
+        'https://discourse.openrobotics.org/c/ros/ros-general/8',
+        'https://discourse.openrobotics.org/c/archive/autoware/46',
+    ]
 
-    Usage: scrapy crawl ros-discourse -a category_slug=ng-ros
-    """
-    super().__init__(*args, **kwargs)
-    self.category_slug = category_slug
-    # resolved category id (set after fetching categories.json)
-    self.target_category_id = None
+    def start_requests(self):
+        """Fetch JSON feeds for all hardcoded categories with pagination."""
+        for category_url in self.category_urls:
+            # Fetch up to 20 pages per category (matching Code1's range(1,20))
+            for page in range(0, 20):
+                json_url = f"{category_url}/l/latest.json?page={page}"
+                yield scrapy.Request(
+                    json_url,
+                    callback=self.parse_json,
+                    dont_filter=True,
+                    meta={'page': page, 'category_url': category_url}
+                )
 
-  def start_requests(self):
-    """Bootstrap crawl by fetching the site categories, then latest.json.
+    def parse_json(self, response):
+        """Parse JSON feed and extract topic URLs."""
+        try:
+            data = json.loads(response.text)
+        except Exception as e:
+            self.logger.warning(f"Failed to parse JSON from {response.url}: {e}")
+            return
 
-    We avoid any network I/O at import time and make decisions at
-    runtime. We first fetch /categories.json to map slug -> id, then
-    request /latest.json and filter topics by the resolved id.
-    """
-    base = "https://discourse.openrobotics.org"
-    categories_url = f"{base}/categories.json"
-    yield scrapy.Request(categories_url, callback=self.parse_categories, dont_filter=True)
+        topics = data.get("topic_list", {}).get("topics", [])
+        
+        if not topics:
+            # No more topics on this page, stop paginating this category
+            return
 
-  def parse_categories(self, response):
-    try:
-      data = json.loads(response.text)
-    except Exception:
-      self.logger.warning("Failed to parse categories.json")
-      data = {}
+        base = "https://discourse.openrobotics.org"
+        for topic in topics:
+            slug = topic.get("slug")
+            if slug:
+                topic_url = f"{base}/t/{slug}"
+                yield scrapy.Request(topic_url, callback=self.parse_detail_page)
 
-    categories = data.get("category_list", {}).get("categories", [])
-    slug = (self.category_slug or "").strip()
-    found = None
-    for c in categories:
-      # match by slug first, fall back to a normalized name
-      if c.get("slug") == slug or (c.get("name") or "").lower().replace(" ", "-") == slug:
-        found = c
-        break
+    def parse_detail_page(self, response):
+        """Extract data from individual topic pages."""
+        item = ROSDItem()
+        
+        # Scrape title of post
+        title = response.css("h1 > a::text").get()
+        item["title"] = title
+        
+        # Scrape thread content
+        thread_contents = response.css(".wrap p::text").getall()
+        item["thread_contents"] = thread_contents
+        
+        # Scrape thread details
+        temp = response.css("li::text").getall()
+        if temp and not all(p.strip() == "" for p in temp):
+            item["thread_details"] = temp
 
-    if found:
-      self.target_category_id = found.get("id")
-      self.logger.info(f"Resolved category '{slug}' -> id={self.target_category_id}")
-    else:
-      self.logger.warning(f"Category slug '{slug}' not found in categories.json; proceeding without filtering")
-
-    # fetch the site-wide feed and filter topics in parse_json
-    base = "https://discourse.openrobotics.org"
-    latest_url = f"{base}/latest.json"
-    yield scrapy.Request(latest_url, callback=self.parse_json, dont_filter=True)
-
-  def parse_json(self, response):
-    try:
-      data = json.loads(response.text)
-    except Exception:
-      self.logger.warning("Failed to parse latest.json")
-      return
-
-    topics = data.get("topic_list", {}).get("topics", [])
-    base = "https://discourse.openrobotics.org"
-    for t in topics:
-      # filter by resolved category id when available
-      if self.target_category_id is not None:
-        if t.get("category_id") != self.target_category_id:
-          continue
-
-      slug = t.get("slug")
-      if slug:
-        topic_url = f"{base}/t/{slug}"
-        yield scrapy.Request(topic_url, callback=self.parse_detail_page)
-
-  def parse_detail_page(self, response):
-    item = ROSDItem()
-    # scrape title of post
-    title = response.css("h1 > a::text").get()
-    item["title"] = title
-    # scrape thread content
-    thread_contents = response.css(".wrap p::text").getall()
-    item["thread_contents"] = thread_contents
-    # scrape thread details
-    temp = response.css("li::text").getall()
-    if temp and not all(p.strip() == "" for p in temp):
-      item["thread_details"] = temp
-
-    item["url"] = response.url
-    yield item
+        item["url"] = response.url
+        yield item

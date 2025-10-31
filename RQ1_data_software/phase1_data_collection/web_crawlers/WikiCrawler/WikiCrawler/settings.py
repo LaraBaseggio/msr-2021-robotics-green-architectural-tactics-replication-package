@@ -88,16 +88,3 @@ DOWNLOAD_DELAY = 5
 #HTTPCACHE_DIR = 'httpcache'
 #HTTPCACHE_IGNORE_HTTP_CODES = []
 #HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
-
-# Enable Playwright (to bypass Anubis protection) ---
-DOWNLOAD_HANDLERS = {
-    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-}
-
-TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
-PLAYWRIGHT_BROWSER_TYPE = "chromium"
-
-PLAYWRIGHT_LAUNCH_OPTIONS = {"headless": True}
-PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT = 30000 
-LOG_LEVEL = 'INFO'
