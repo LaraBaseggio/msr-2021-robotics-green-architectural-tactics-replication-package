@@ -22,10 +22,10 @@ while '' in columns['URL']:
     columns['URL'].remove('')
 #print(columns['URL'])
 
-with open('data/github-closed-pr-final_data.json') as f:
+with open('data2/github-closed-pr-final_data.json') as f:
     d = json.load(f)
     #print(d)
-with open('data/github-open-pr_data.json') as f:
+with open('data2/github-open-pr_data.json') as f:
     e = json.load(f)
 
 file_url = [item.get('url') for item in d]

@@ -1,10 +1,11 @@
-import scrapy
-from scrapy.spiders import CrawlSpider, Rule
-from scrapy.linkextractors import LinkExtractor
-from GitHubWebCrawler.items import GitItem
+import requests
 import csv
 import json
+import os
+import time
+import re
 from collections import defaultdict
+from urllib.parse import urlparse
 
 ####################################
 #### REMOVE BLANK LINES FROM CSV ###
@@ -18,97 +19,298 @@ def no_blank(fd):
     except:
         return
 
-class GitSpider(CrawlSpider):
-    name = "github"
-    columns = defaultdict(list)
-    with open('/Users/agukalpa/Desktop/thesis/green_tactics_ROS/phase1_data_collection/git_scraper/Repos_all.csv') as f:
-      reader = csv.DictReader(no_blank(f))
-      for row in reader:
-          for (k,v) in row.items(): 
-              columns[k].append(v)
+# Configuration
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
+API_BASE = 'https://api.github.com'
+HEADERS = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'GitOpenIssuesScraper'
+}
+if GITHUB_TOKEN:
+    HEADERS['Authorization'] = f'token {GITHUB_TOKEN}'
 
+# Rate limiting: 5000 requests/hour = ~0.72 seconds between requests
+RATE_LIMIT_DELAY = 0.72
+
+# Get base directory (git_scraper)
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+repos_csv_path = os.path.join(base_dir, 'Repos_all.csv')
+git_repos_dir = os.path.join(base_dir, 'git_repos')
+output_file = os.path.join(base_dir, 'data2', 'github-open-issues_data.json')
+
+
+def parse_markdown_for_elements(body):
+    """Parse markdown body to extract code, quotes, lists, and paragraphs."""
+    if not body:
+        return {
+            'issue_contents': [],
+            'issue_code': [],
+            'issue_quotes': [],
+            'contents_details': [],
+            'contents_details_more': []
+        }
+    
+    issue_contents = []
+    issue_code = []
+    issue_quotes = []
+    contents_details = []
+    contents_details_more = []
+    
+    lines = body.split('\n')
+    in_code_block = False
+    in_quote = False
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Code blocks (```code``` or `code`)
+        if stripped.startswith('```'):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            issue_code.append(stripped)
+            continue
+        if stripped.startswith('`') and stripped.endswith('`') and len(stripped) > 2:
+            code = stripped.strip('`')
+            if code:
+                issue_code.append(code)
+        
+        # Blockquotes (> text)
+        if stripped.startswith('>'):
+            quote_text = stripped[1:].strip()
+            if quote_text:
+                issue_quotes.append(quote_text)
+            continue
+        
+        # Lists (- item or * item or 1. item)
+        if re.match(r'^[-*]\s+', stripped) or re.match(r'^\d+\.\s+', stripped):
+            list_text = re.sub(r'^[-*]\s+', '', re.sub(r'^\d+\.\s+', '', stripped))
+            if list_text:
+                # Check if it has paragraph content (longer or has newlines)
+                if '\n' in list_text or len(list_text) > 100:
+                    contents_details.append(list_text)
+                else:
+                    # Filter out items with newlines for contents_details_more
+                    if "\n" not in list_text:
+                        contents_details_more.append(list_text)
+            continue
+        
+        # Regular paragraphs
+        if stripped and not stripped.startswith('#') and not stripped.startswith('|'):
+            issue_contents.append(stripped)
+    
+    return {
+        'issue_contents': issue_contents,
+        'issue_code': issue_code,
+        'issue_quotes': issue_quotes,
+        'contents_details': contents_details,
+        'contents_details_more': contents_details_more
+    }
+
+
+def get_repo_owner_and_name(github_url):
+    """Extract owner and repo name from GitHub URL."""
+    parsed = urlparse(github_url)
+    path_parts = [p for p in parsed.path.split('/') if p]
+    if len(path_parts) >= 2:
+        owner = path_parts[0]
+        repo = path_parts[1].rstrip('.git')
+        return owner, repo
+    return None, None
+
+
+def fetch_open_issues(owner, repo):
+    """Fetch all open issues for a repository."""
+    url = f'{API_BASE}/repos/{owner}/{repo}/issues'
+    params = {
+        'state': 'open',
+        'per_page': 100,
+        'page': 1
+    }
+    
+    all_issues = []
+    
+    while True:
+        try:
+            response = requests.get(url, headers=HEADERS, params=params)
+            
+            if response.status_code == 200:
+                issues = response.json()
+                if not issues:
+                    break
+                
+                # Filter out pull requests (issues API returns both issues and PRs)
+                # PRs have 'pull_request' field, issues don't
+                issues_only = [issue for issue in issues if 'pull_request' not in issue]
+                all_issues.extend(issues_only)
+                
+                # Check if there are more pages
+                if 'next' in response.links:
+                    params['page'] += 1
+                else:
+                    break
+                    
+            elif response.status_code == 429:
+                reset_time = int(response.headers.get('X-RateLimit-Reset', time.time() + 60))
+                wait_time = max(reset_time - int(time.time()), 0) + 10
+                print(f"  Rate limited! Waiting {wait_time} seconds...")
+                time.sleep(wait_time)
+                continue
+                
+            elif response.status_code == 404:
+                print(f"  Repository {owner}/{repo} not found or inaccessible")
+                break
+                
+            else:
+                print(f"  Error {response.status_code}: {response.text[:100]}")
+                break
+            
+            time.sleep(RATE_LIMIT_DELAY)
+            
+        except Exception as e:
+            print(f"  Error fetching issues: {e}")
+            break
+    
+    return all_issues
+
+
+def process_issue(issue_data):
+    """Process a single issue and extract all required fields."""
+    body = issue_data.get('body', '')
+    parsed = parse_markdown_for_elements(body)
+    
+    # Build item matching the Scrapy output format
+    item = {
+        'url': issue_data.get('html_url', '') if issue_data.get('html_url') else '',
+        'issue_title': issue_data.get('title', '').strip() if issue_data.get('title') else '',
+        'issue_status': 'Open',
+        'posted_on': issue_data.get('created_at', '') if issue_data.get('created_at') else '',
+        'issue_contents': parsed['issue_contents'] if parsed['issue_contents'] else [],
+        'issue_code': parsed['issue_code'] if parsed['issue_code'] else [],
+        'issue_quotes': parsed['issue_quotes'] if parsed['issue_quotes'] else [],
+        'contents_details': parsed['contents_details'] if parsed['contents_details'] else [],
+        'contents_details_more': parsed['contents_details_more'] if parsed['contents_details_more'] else []
+    }
+    
+    return item
+
+
+# Main execution
+if __name__ == '__main__':
+    print("=" * 70)
+    print("GitHub API Open Issues Scraper")
+    print("=" * 70)
+    
+    if not GITHUB_TOKEN:
+        print("WARNING: No GITHUB_TOKEN found in environment!")
+        print("Set it with: export GITHUB_TOKEN=your_token")
+        print("Without token: 60 requests/hour limit")
+        print("With token: 5,000 requests/hour limit")
+        print()
+    
+    # Read CSV
+    columns = defaultdict(list)
+    with open(repos_csv_path) as f:
+        reader = csv.DictReader(no_blank(f))
+        for row in reader:
+            for (k, v) in row.items():
+                columns[k].append(v)
+    
     while '' in columns['URL']:
         columns['URL'].remove('')
-    #print(columns['URL'])
-    with open('/Users/agukalpa/Desktop/thesis/green_tactics_ROS/phase1_data_collection/git_scraper/data/github-open-issue1_data.json') as f:
-        d = json.load(f)
-    #print(d)
-    with open('/Users/agukalpa/Desktop/thesis/green_tactics_ROS/phase1_data_collection/git_scraper/data/github-open-issue2_data.json') as f:
-        e = json.load(f)
-
-    file_url = [item.get('url') for item in d]
-    new_url = []
-    for url in file_url:
-        url = url.split('/issues')[0]
-        new_url.append(url)
-    file_url1 = [item.get('url') for item in e]
-    new_url1 = []
-    for url in file_url1:
-        url = url.split('/issues')[0]
-        new_url1.append(url)
+    
+    # Filter GitHub URLs
     git_urls = [s for s in columns['URL'] if "github.com" in s]
-    #output = list(set(git_urls) - set(new_url))
-    #output = list(set((new_url+new_url1))-set(git_urls))
-    print(len(git_urls))
-    print(len(set(new_url)))
-    print(len(set(new_url1)))
-    temp = new_url + new_url1
-    print(len(set(temp)))
-    temp1 = list(set(git_urls)-set(temp))
-    print(len(temp1))
-    # git_urls = output
-    # #print(len(git_urls))
-    git_urls = [x + "/issues" for x in git_urls]
-    git_issue_urls = [x + "?q=is%3Aopen+is%3Aissue" for x in git_urls]
-    # #print(git_issue_urls)
-    start_urls = ['https://github.com/AutonomyLab/bebop_autonomy/issues']
-    # #start_urls = git_issue_urls
-
-    # # rules = (
-    # #     Rule(LinkExtractor(allow=(), restrict_css=('.pagination',)),
-    # #          callback="parse_link",
-    # #          follow=True),)
-
-    def parse(self, response):
-        for link in self.git_issue_urls:
-            #print(link)
-            yield scrapy.Request(link, callback=self.parse_link)
-
-
-    def parse_link(self, response):
-        #print('Processing..' + response.url)
-        open_issue_links = response.css('a.link-gray-dark.v-align-middle.no-underline.h4.js-navigation-open::attr(href)').extract()
-        for a in open_issue_links:
-            #print(a)
-            yield scrapy.Request(response.urljoin(a), callback=self.parse_detail_page)
-
-    def parse_detail_page(self, response):
-        #print('Processing..' + response.url)
-        item = GitItem()
-        response.css('td.d-block.comment-body.markdown-body.js-comment-body > ul > li > p::text').extract()
-        response.css('td.d-block.comment-body.markdown-body.js-comment-body code::text').extract()
-
-        url = response.url
-        item['url'] = url
-        issue_title = response.css('h1 span.js-issue-title::text').extract_first()
-        issue_title = issue_title.strip()
-        item['issue_title'] = issue_title
-        item['issue_status'] = "Open"
-        posted_on = response.css('relative-time::text').extract_first()
-        item['posted_on'] = posted_on
-        issue_contents = response.css('td.d-block.comment-body.markdown-body.js-comment-body p::text').extract()
-        item['issue_contents'] = issue_contents
-        if response.css('td.d-block.comment-body.markdown-body.js-comment-body code::text').extract():
-            issue_code = response.css('td.d-block.comment-body.markdown-body.js-comment-body code::text').extract()
-            item['issue_code'] = issue_code
-        if response.css('td.d-block.comment-body.markdown-body.js-comment-body > blockquote > p::text').extract():
-            issue_quotes = response.css('td.d-block.comment-body.markdown-body.js-comment-body > blockquote > p::text').extract()
-            item['issue_quotes'] = issue_quotes
-        if response.css('td.d-block.comment-body.markdown-body.js-comment-body > ul > li > p::text').extract():
-            contents_details = response.css('td.d-block.comment-body.markdown-body.js-comment-body > ul > li > p::text').extract()
-            item['contents_details'] = contents_details
-        if response.css('td.d-block.comment-body.markdown-body.js-comment-body > ul > li::text').extract():
-            contents_details_more = response.css('td.d-block.comment-body.markdown-body.js-comment-body > ul > li::text').extract()
-            contents_details_more = [ x for x in contents_details_more if "\n" not in x ] 
-            item['contents_details_more'] = contents_details_more
-        yield item
+    
+    # Check if repositories exist in git_repos/
+    existing_repo_urls = []
+    for url in git_urls:
+        repo_name = url.rstrip('/').split('/')[-1]
+        if repo_name.endswith('.git'):
+            repo_name = repo_name[:-4]
+        
+        repo_path = os.path.join(git_repos_dir, repo_name)
+        if os.path.exists(repo_path) and os.path.isdir(repo_path):
+            if os.path.exists(os.path.join(repo_path, '.git')):
+                existing_repo_urls.append(url)
+    
+    print(f"Found {len(existing_repo_urls)} existing repositories out of {len(git_urls)} GitHub repositories")
+    print()
+    
+    # Create output directory
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    
+    # Load existing data if file exists (for resume capability)
+    all_items = []
+    if os.path.exists(output_file):
+        try:
+            with open(output_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        all_items.append(json.loads(line))
+            print(f"Loaded {len(all_items)} existing items from {output_file}")
+            print("(Resuming from previous run)")
+            print()
+        except:
+            print("Could not load existing file, starting fresh")
+            print()
+    
+    # Track processed repos to avoid duplicates
+    processed_repos = set()
+    if all_items:
+        # Extract already processed repos from existing data
+        for item in all_items:
+            url = item.get('url', '')
+            if '/issues/' in url:
+                # Extract owner/repo from URL
+                parts = url.split('/')
+                if len(parts) >= 5:
+                    repo_key = f"{parts[3]}/{parts[4]}"
+                    processed_repos.add(repo_key)
+        print(f"Found {len(processed_repos)} already processed repositories")
+        print()
+    
+    # Process each repository
+    total_repos = len(existing_repo_urls)
+    
+    for idx, url in enumerate(existing_repo_urls, 1):
+        owner, repo = get_repo_owner_and_name(url)
+        if not owner or not repo:
+            print(f"[{idx}/{total_repos}] Skipping invalid URL: {url}")
+            continue
+        
+        repo_key = f"{owner}/{repo}"
+        if repo_key in processed_repos:
+            print(f"[{idx}/{total_repos}] Skipping {owner}/{repo} (already processed)")
+            continue
+        
+        print(f"[{idx}/{total_repos}] Processing {owner}/{repo}...")
+        
+        # Fetch open issues
+        issues = fetch_open_issues(owner, repo)
+        print(f"  Found {len(issues)} open issues")
+        
+        # Process each issue
+        repo_items = []
+        for issue in issues:
+            item = process_issue(issue)
+            repo_items.append(item)
+            all_items.append(item)
+        
+        print(f"  Added {len(repo_items)} issues from this repo")
+        print(f"  Total items collected: {len(all_items)}")
+        
+        # Save after each repository (incremental save)
+        print(f"  Saving progress to {output_file}...")
+        with open(output_file, 'w') as f:
+            for item in all_items:
+                f.write(json.dumps(item) + '\n')
+        print("  Progress saved!")
+        print()
+    
+    print("=" * 70)
+    print("Done!")
+    print(f"Total items: {len(all_items)}")
+    print(f"Output saved to: {output_file}")
+    print("=" * 70)

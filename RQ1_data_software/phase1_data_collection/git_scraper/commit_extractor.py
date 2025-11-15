@@ -3,7 +3,7 @@ import csv
 import json
 from collections import defaultdict
 import os
-from pydriller import RepositoryMining
+from pydriller import Repository
 
 ####################################
 #### REMOVE BLANK LINES FROM CSV ###
@@ -31,7 +31,7 @@ columns = defaultdict(list)
 repo_names = []
 repo_urls = []
 
-with open('Repos1.csv') as f:
+with open('Repos_all.csv') as f:
     reader = csv.DictReader(no_blank(f))
     for row in reader:
         for (k,v) in row.items(): 
@@ -55,40 +55,59 @@ while '' in columns['URL']:
 
 for name in repo_names:
     switch_to_dir('git_repos')
+    
+    # Check if repository directory exists
+    repo_path = os.path.join(os.getcwd(), name)
+    if not os.path.exists(repo_path) or not os.path.isdir(repo_path):
+        print(f"Skipping {name} - repository not found in git_repos/")
+        switch_to_dir('../')
+        continue
+    
+    # Check if it's a valid git repository
+    if not os.path.exists(os.path.join(repo_path, '.git')):
+        print(f"Skipping {name} - not a valid git repository")
+        switch_to_dir('../')
+        continue
+    
     commit_msgs = []
     commit_hash = []
     commit_date = []
     commit_msg_data = []
     commit_data = {}
 
-    g = git.cmd.Git(name)
-    repo = git.Repo(name)
-    url = repo.remote("origin").url
-    print(url)
-    repo_urls.append(url)
-    #g.pull()
+    try:
+        g = git.cmd.Git(name)
+        repo = git.Repo(name)
+        url = repo.remote("origin").url
+        print(f"Processing {name}: {url}")
+        repo_urls.append(url)
+        #g.pull()
 
+        for commit in Repository(name).traverse_commits():
+            commit_msgs.append(commit.msg)
+            commit_hash.append(commit.hash)
+            commit_date.append(commit.committer_date)
 
-    for commit in RepositoryMining(name).traverse_commits():
-        commit_msgs.append(commit.msg)
-        commit_hash.append(commit.hash)
-        commit_date.append(commit.committer_date)
+        commit_dict = dict(zip(commit_hash, commit_msgs))
+        commit_msg_data.append(commit_dict)
+        print(f"Extracted {len(commit_msg_data)} commit(s) from {name}")
+        commit_data['repo_name'] = name
+        commit_data['url'] = url
+        #commit_data['url'] = columns['URL'][1]
+        commit_data['commit_info'] = commit_msg_data
+        json_data = json.dumps(commit_data)
 
-    commit_dict = dict(zip(commit_hash, commit_msgs))
-    commit_msg_data.append(commit_dict)
-    print(len(commit_msg_data))
-    commit_data['repo_name'] = name
-    commit_data['url'] = url
-    #commit_data['url'] = columns['URL'][1]
-    commit_data['commit_info'] = commit_msg_data
-    json_data = json.dumps(commit_data)
-
-    switch_to_dir('../')
-    with open('data/commit_data3.json', 'a') as outfile:
-        outfile.write(json_data)
-        outfile.write(",")
-        outfile.write("\n")
-        outfile.close()
+        switch_to_dir('../')
+        os.makedirs('data2', exist_ok=True)
+        with open('data2/commit_data.json', 'a') as outfile:
+            outfile.write(json_data)
+            outfile.write(",")
+            outfile.write("\n")
+            outfile.close()
+    except Exception as e:
+        print(f"Error processing {name}: {str(e)}")
+        switch_to_dir('../')
+        continue
 
 
 
