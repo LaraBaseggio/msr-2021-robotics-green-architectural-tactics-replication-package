@@ -2,7 +2,7 @@ import csv
 import json
 from itertools import zip_longest
 
-with open('../git_scraper/data/github-open-pr_data.json') as f:
+with open('../git_scraper/data2/github-open-pr_data.json') as f:
     git_pr_data = json.load(f)
 
 git_pr_url = [item.get('url') for item in git_pr_data]
@@ -96,7 +96,7 @@ for details_m in git_pr_details_m:
 # print(len(git_pr_qdetails_new))
 # print(len(git_pr_adetails_new))
 
-for i in range(1031):
+for i in range(len(git_pr_url)):
     rcontents = git_pr_contents_new[
         i] + '' + git_pr_code_new[i] + '' + git_pr_comments_new[i] + '' + git_pr_quotes_new[i] + '' + git_pr_details_new[i] + '' + git_pr_details_m_new[i]
     raw_contents.append(rcontents)
