@@ -177,7 +177,9 @@ for git_repo in git_repos_names:
 	final_data = create_json(extracted_md_contents, extracted_comments_c, 
 	 	extracted_comments_p, comments_file_names, md_file_names, git_repo)
 	# print(final_data)
-	with open('data/git_repos1_data.json', 'a') as outfile:
+	# ensure output directory exists (use data2 for new outputs)
+	os.makedirs('data2', exist_ok=True)
+	with open('data2/git_repos1_data.json', 'a') as outfile:
 		outfile.write(json.dumps(final_data))
 		outfile.write(",")
 		outfile.write("\n")

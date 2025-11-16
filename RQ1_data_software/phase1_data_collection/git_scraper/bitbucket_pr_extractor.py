@@ -94,7 +94,7 @@ for link in bitbucket_urls_raw:
 	for i in range(len(title)):
 		json_data = create_json(b[i]+"/pull-requests/"+pull_request_number[i], title[i], display_name[i], post_date[i], description[i], pr_contents[i])
 		#print(json_data)
-		with open('data/bitbucket_pr_data.json', 'a') as outfile:
+		with open('data2/bitbucket_pr_data.json', 'a') as outfile:
 			outfile.write(json.dumps(json_data))
 			outfile.write(",")
 			outfile.write("\n")
