@@ -2,7 +2,7 @@ import csv
 import json
 from itertools import zip_longest
 
-with open('../git_scraper/data/github-closed-issues_data.json') as f:
+with open('../git_scraper/data2/github-closed-issues_data.json') as f:
     git_issue_data = json.load(f)
 
 git_issue_url = [item.get('url') for item in git_issue_data]

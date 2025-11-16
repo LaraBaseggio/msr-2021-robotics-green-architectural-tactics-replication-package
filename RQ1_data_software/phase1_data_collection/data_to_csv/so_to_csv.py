@@ -2,7 +2,7 @@ import csv
 import json
 from itertools import zip_longest
 
-with open('../data/new_stackoverflow_data.json') as f:
+with open('../data/stackoverflow_new_data.json') as f:
     stackoverflow_data = json.load(f)
 
 stackoverflow_url = [item.get('url') for item in stackoverflow_data]
@@ -63,7 +63,7 @@ for acode in stackoverflow_acode:
 # print(len(stackoverflow_answer_code_new))
 
 
-for i in range(1880):
+for i in range(len(stackoverflow_question_new)):
     rcontents = stackoverflow_question_new[i] + '' + stackoverflow_question_code_new[
         i] + '' + stackoverflow_answer_new[i] + '' + stackoverflow_answer_code_new[i]
     raw_contents.append(rcontents)

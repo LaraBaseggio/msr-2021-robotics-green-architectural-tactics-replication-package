@@ -13,7 +13,7 @@ for document in query:
 	document_list.append(document)
 
 print(len(document_list))
-with open('../data/ros-answers-final_data.json', 'a') as outfile:
+with open('../data/rosa_new_data.json', 'a') as outfile:
 	for item in document_list:
 		del item['_id']
 		outfile.write(json.dumps(item))

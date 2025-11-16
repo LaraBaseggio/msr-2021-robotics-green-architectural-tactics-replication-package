@@ -40,7 +40,7 @@ with open('Repos_all.csv') as f:
 while '' in columns['URL']:
     columns['URL'].remove('')
 
-with open('../git_scraper/data/git_repos_data.json') as f:
+with open('../git_scraper/data2/git_repos1_data.json') as f:
     repo_data = json.load(f)
 
 repo_url = []

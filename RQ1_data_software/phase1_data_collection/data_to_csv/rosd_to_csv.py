@@ -2,7 +2,7 @@ import csv
 import json
 from itertools import zip_longest
 
-with open('../data/ros-discourse_data.json') as f:
+with open('../data/rosd_new_data.json') as f:
     rosd_data = json.load(f)
 
 rosd_url = [item.get('url') for item in rosd_data]
@@ -47,7 +47,7 @@ for details in rosd_tdetails:
 # print(len(rosd_tcontents_new))
 # print(len(rosd_tdetails_new))
 
-for i in range(2604):
+for i in range(len(rosd_url)):
     rcontents = rosd_tcontents_new[i] + '' + rosd_tdetails_new[i]
     raw_contents.append(rcontents)
 

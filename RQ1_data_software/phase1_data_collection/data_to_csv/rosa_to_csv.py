@@ -2,7 +2,7 @@ import csv
 import json
 from itertools import zip_longest
 
-with open('../data/ros-answers-final_data.json') as f:
+with open('../data/rosa_new_data.json') as f:
     rosa_data = json.load(f)
 
 rosa_url = [item.get('url') for item in rosa_data]
@@ -56,10 +56,10 @@ for answer in rosa_answer:
 for qdetails in rosa_qdetails:
     try:
         qdetails = ''.join(qdetails)
-        rosa_qdetails_new.append(qetails)
+        rosa_qdetails_new.append(qdetails)
     except TypeError:
-        qetails = ''
-        rosa_qdetails_new.append(qetails)
+        qdetails = ''
+        rosa_qdetails_new.append(qdetails)
 
 for adetails in rosa_adetails:
     try:
@@ -93,7 +93,7 @@ for qcode in rosa_qcode:
 # print(len(rosa_qdetails_new))
 # print(len(rosa_adetails_new))
 
-for i in range(43672):
+for i in range(len(rosa_url)):
     rcontents = rosa_contents_new[
         i] + '' + rosa_qdetails_new[i] + '' + rosa_qcode_new[i] + '' + rosa_answer_new[i] + '' + rosa_adetails_new[i] + '' + rosa_acode_new[i]
     raw_contents.append(rcontents)
