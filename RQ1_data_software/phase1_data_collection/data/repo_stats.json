@@ -1,4 +1,4 @@
-{"url": "https://bitbucket.org/_Luc_/hand_control", "commits": 283, "prs": 2, "contributors": 7, "cpp": 5, "py": 0, "md": 2},
+[{"url": "https://bitbucket.org/_Luc_/hand_control", "commits": 283, "prs": 2, "contributors": 7, "cpp": 5, "py": 0, "md": 2},
 {"url": "https://github.com/aau-ros/aau_multi_robot", "commits": 102, "issues": 10, "prs": 6, "contributors": 13, "cpp": 34, "py": 5, "md": 1},
 {"url": "https://bitbucket.org/acl-mit/rvo_path_planner", "commits": 191, "prs": 1, "contributors": 5, "cpp": 13, "py": 6, "md": 1},
 {"url": "https://github.com/AcutronicRobotics/moveit2", "commits": 7700, "issues": 36, "prs": 93, "contributors": 237, "cpp": 306, "py": 35, "md": 20},
@@ -328,4 +328,5 @@
 {"url": "https://github.com/yijiangh/choreo", "commits": 596, "issues": "yijiangh/choreo", "prs": "yijiangh/choreo", "contributors": 6, "cpp": 368, "py": 2, "md": 33},
 {"url": "https://github.com/youbot/youbot-ros-pkg", "commits": 330, "issues": "youbot/youbot-ros-pkg", "prs": "youbot/youbot-ros-pkg", "contributors": 18, "cpp": 64, "py": 8, "md": 1},
 {"url": "https://github.com/yujinrobot/kobuki", "commits": 1375, "issues": "yujinrobot/kobuki", "prs": "yujinrobot/kobuki", "contributors": 31, "cpp": 14, "py": 37, "md": 1},
-{"url": "https://github.com/yujinrobot/yujin_ocs", "commits": 438, "issues": "yujinrobot/yujin_ocs", "prs": "yujinrobot/yujin_ocs", "contributors": 17, "cpp": 34, "py": 20, "md": 5},
+{"url": "https://github.com/yujinrobot/yujin_ocs", "commits": 438, "issues": "yujinrobot/yujin_ocs", "prs": "yujinrobot/yujin_ocs", "contributors": 17, "cpp": 34, "py": 20, "md": 5}
+]
