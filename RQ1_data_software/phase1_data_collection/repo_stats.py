@@ -5,13 +5,11 @@ import re
 import csv
 import git
 from collections import defaultdict
-from pydriller import RepositoryMining
 import requests
 import urllib.request, json
 import urllib3
 from urllib.request import urlopen
 import time
-import github3
 import subprocess
 import certifi
 import sys
@@ -26,7 +24,7 @@ def form_github_request(url):
     Uses the GITHUB_TOKEN environment variable for Authorization (if set).
     Falls back to unauthenticated requests if the env var is not present.
     """
-    time.sleep(3600/github_limit)
+    #time.sleep(3600/github_limit)
     http = urllib3.PoolManager(ca_certs=certifi.where())
 
     # Read token from environment
@@ -79,24 +77,20 @@ def get_file_count(rootdir):
                 md_file_count.append(file)
     return len(cpp_file_count), len(py_file_count), len(md_file_count)
 
-def get_commit_count():
-    switch_to_dir('git_repos')
-    commit_hash = []
-    commit_date = []
-    commit_msg_data = []
-    commit_data = {}
+def get_commit_count(repo_path, repo_name):
+    """Return (num_of_commits, remote_url) for the repo at repo_path.
 
-    g = git.cmd.Git(name)
-    repo = git.Repo(name)
+    This version does not change the process working directory; it opens the
+    repository by path so the caller can choose the correct git_repos root.
+    """
+    repo = git.Repo(repo_path)
     url = repo.remote("origin").url
-    #print(url)
-    #g.pull()
     num_of_commits = len(list(repo.iter_commits()))
-    switch_to_dir('../')
     return num_of_commits, url
 
 def get_contributors(repo_name):
-    contributors = int(subprocess.check_output("cd " + "git_repos/"+ repo_name + ";git shortlog -s HEAD | wc -l", shell=True))
+    # run git shortlog in the git_scraper/git_repos path
+    contributors = int(subprocess.check_output("cd " + "git_scraper/git_repos/" + repo_name + ";git shortlog -s HEAD | wc -l", shell=True))
     return contributors
 
 def get_git_prs(repo_name):
@@ -158,7 +152,7 @@ repo_names = []
 repo_urls = []
 #git_repos_names = [dI for dI in os.listdir('git_repos') if os.path.isdir(os.path.join('git_repos',dI))]
 
-with open('Repos_all.csv') as f:
+with open('git_scraper/Repos_all.csv') as f:
     reader = csv.DictReader(no_blank(f))
     for row in reader:
         for (k,v) in row.items(): 
@@ -176,11 +170,16 @@ while '' in columns['URL']:
 
 
 for name in repo_names:
-    rootdir = 'git_repos/'+name
+    repo_path = os.path.join('git_scraper', 'git_repos', name)
+    if not os.path.isdir(repo_path):
+        print("Skipping {}: {} not found".format(name, repo_path))
+        continue
+
+    rootdir = repo_path
     commit_data = {}
 
     cpp_file_count, py_file_count, md_file_count = get_file_count(rootdir)
-    commits_num, url = get_commit_count()
+    commits_num, url = get_commit_count(repo_path, name)
 
     commit_data['url'] = url
     commit_data['commits'] = commits_num
@@ -220,7 +219,7 @@ for name in repo_names:
     commit_data['md'] = md_file_count
     json_data = json.dumps(commit_data)
 
-    with open('data/repo_stats1.json', 'a') as outfile:
+    with open('data/repo_stats.json', 'a') as outfile:
         outfile.write(json_data)
         outfile.write(",")
         outfile.write("\n")
