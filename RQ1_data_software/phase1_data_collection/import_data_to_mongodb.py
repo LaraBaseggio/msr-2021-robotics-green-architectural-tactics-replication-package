@@ -4,8 +4,13 @@ import json
 import os
 from pathlib import Path
 
-# MongoDB connection
-MONGO_URI = "mongodb+srv://larabaseggio2000_db_user:3B36ycsXvgFU2xRi@ros-data.ujsrakb.mongodb.net/data_phase1?ssl=true&ssl_cert_reqs=CERT_NONE"
+username = os.getenv("MONGO_USER")
+password = os.getenv("MONGO_PASSWORD")
+MONGO_URI = (
+    f"mongodb+srv://{username}:{password}"
+    "@ros-data.ujsrakb.mongodb.net/data_phase1"
+    "?ssl=true&ssl_cert_reqs=CERT_NONE"
+)
 
 # File to collection mapping
 FILE_COLLECTION_MAP = {
