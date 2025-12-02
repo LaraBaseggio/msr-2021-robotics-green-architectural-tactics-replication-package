@@ -1,7 +1,7 @@
 import json
 
 def count_user():
-	with open('../data/wiki_stats.json') as f:
+	with open('../data/wiki_new_stats.json') as f:
 		user_data = json.load(f)
 		wiki_user = [item.get('user') for item in user_data]
 
