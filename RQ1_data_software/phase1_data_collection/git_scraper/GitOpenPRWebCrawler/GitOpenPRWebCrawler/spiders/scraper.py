@@ -34,7 +34,7 @@ RATE_LIMIT_DELAY = 0.72
 
 # Get base directory (git_scraper)
 base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-repos_csv_path = os.path.join(base_dir, 'Repos_all.csv')
+json_file_path = os.path.join(base_dir, '8_github_with_launch_files.json')
 git_repos_dir = os.path.join(base_dir, 'git_repos')
 output_file = os.path.join(base_dir, 'data2', 'github-open-pr_data.json')
 
@@ -236,19 +236,15 @@ if __name__ == '__main__':
         print("With token: 5,000 requests/hour limit")
         print()
     
-    # Read CSV
-    columns = defaultdict(list)
-    with open(repos_csv_path) as f:
-        reader = csv.DictReader(no_blank(f))
-        for row in reader:
-            for (k, v) in row.items():
-                columns[k].append(v)
+    # Read JSON
+    if not os.path.exists(json_file_path):
+        print(f"Error: Could not find {json_file_path}")
+        exit(1)
+        
+    with open(json_file_path, 'r') as f:
+        repos_data = json.load(f)
     
-    while '' in columns['URL']:
-        columns['URL'].remove('')
-    
-    # Filter GitHub URLs
-    git_urls = [s for s in columns['URL'] if "github.com" in s]
+    git_urls = [repo['html_url'] for repo in repos_data if 'html_url' in repo and repo['html_url']]
     
     # Check if repositories exist in git_repos/
     existing_repo_urls = []

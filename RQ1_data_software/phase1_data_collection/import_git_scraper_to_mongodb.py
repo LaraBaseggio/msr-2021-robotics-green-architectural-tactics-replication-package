@@ -17,7 +17,6 @@ FILE_COLLECTION_MAP = {
     'github-open-pr_data.json': 'GitHubOpenPRs',
     'github-closed-issues_data.json': 'GitHubClosedIssues',
     'github-open-issues_data.json': 'GitHubOpenIssues',
-    'bitbucket_pr_data.json': 'BitbucketPRs',
     'commit_data.json': 'Commits',
     'git_repos1_data.json': 'GitRepos',
 }

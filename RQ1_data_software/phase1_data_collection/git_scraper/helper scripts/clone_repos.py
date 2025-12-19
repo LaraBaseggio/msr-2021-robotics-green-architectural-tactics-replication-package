@@ -1,34 +1,28 @@
 import git
-import csv
+import json
 import os
-from collections import defaultdict
 
-####################################
-#### REMOVE BLANK LINES FROM CSV ###
-####################################
-def no_blank(fd):
-    try:
-        while True:
-            line = next(fd)
-            if len(line.strip()) != 0:
-                yield line
-    except:
-        return
+# Path to the JSON file containing repository information
+json_file = '8_github_with_launch_files.json'
 
-columns = defaultdict(list)
-with open('Repos_all.csv') as f:
-	reader = csv.DictReader(no_blank(f))
-	for row in reader:
-		for (k,v) in row.items(): 
-			columns[k].append(v)
+if not os.path.exists(json_file):
+    # Try parent directory if not found (in case script is run from 'helper scripts')
+    json_file = os.path.join('..', '8_github_with_launch_files.json')
 
-while '' in columns['URL']:
-    columns['URL'].remove('')
-print(columns['URL'])
+if not os.path.exists(json_file):
+    print(f"Error: Could not find {json_file}")
+    exit(1)
+
+with open(json_file, 'r') as f:
+    repos = json.load(f)
+
+urls = [repo['html_url'] for repo in repos if 'html_url' in repo and repo['html_url']]
+
+print(f"Found {len(urls)} repositories to clone.")
 
 os.makedirs('git_repos', exist_ok=True)
 
-for url in columns['URL']:
+for url in urls:
 	# Extract repo name from URL
 	# Handle URLs like: https://github.com/owner/repo or https://github.com/owner/repo.git
 	repo_name = url.rstrip('/').split('/')[-1]

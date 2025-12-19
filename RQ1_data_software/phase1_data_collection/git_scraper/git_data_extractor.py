@@ -13,6 +13,8 @@ def get_file_names(rootdir):
 	#or file.endswith(".h")
 	md_file_names = []
 	for root, dirs, files in os.walk(rootdir):
+		# Skip hidden directories like .venv, .git, etc.
+		dirs[:] = [d for d in dirs if not d.startswith('.')]
 		for file in files:
 			if (file.endswith(".cpp") or file.endswith(".py")):
 				comments_file_names.append(file)
@@ -24,17 +26,21 @@ def get_file_names(rootdir):
 ########### GET FILE PATHS ###########
 ######################################
 def get_file_path(rootdir):
+	comments_file_location = []
+	md_location = []
 	for subdir, dirs, files in os.walk(rootdir):
-	    for file in files:
-	        #print os.path.join(subdir, file)
-	        #or filepath.endswith(".h")
-	        filepath = subdir + os.sep + file
+		# Skip hidden directories
+		dirs[:] = [d for d in dirs if not d.startswith('.')]
+		for file in files:
+			#print os.path.join(subdir, file)
+			#or filepath.endswith(".h")
+			filepath = os.path.join(subdir, file)
 
-	        if (filepath.endswith(".cpp") 
-	        	or filepath.endswith(".py")):
-	            comments_file_location.append(filepath)
-	        if (filepath.endswith(".md")):
-	        	md_location.append(filepath)
+			if (filepath.endswith(".cpp") 
+				or filepath.endswith(".py")):
+				comments_file_location.append(filepath)
+			if (filepath.endswith(".md")):
+				md_location.append(filepath)
 	return comments_file_location, md_location
 
 ######################################
@@ -44,12 +50,18 @@ def extract_md_contents(md_location):
 	contents = ""
 	data = {}
 	for location in md_location:
+		if not os.path.exists(location):
+			continue
 		md_contents = []
-		with open(location, "r") as f:
-			contents = f.readlines()
-			file_name = location.split('/')[-1]
-			md_contents.append(contents)
-			data[location]=md_contents
+		try:
+			# Added encoding='utf-8' and errors='ignore' to prevent crashes on non-UTF-8 characters
+			with open(location, "r", encoding='utf-8', errors='ignore') as f:
+				contents = f.readlines()
+				file_name = os.path.basename(location)
+				md_contents.append(contents)
+				data[location]=md_contents
+		except Exception as e:
+			print(f"Error reading {location}: {e}")
 	return data
 
 ######################################
@@ -60,18 +72,20 @@ def extract_source_code_comments_c(comments_file_location):
 	# iterate through .cpp files only
 	comments_file_location = [s for s in comments_file_location if ".cpp" in s]
 	for location in comments_file_location:
+		if not os.path.exists(location):
+			continue
 		comments_c = []
 		try:
-			with open(location, "r") as f:
+			with open(location, "r", encoding='utf-8', errors='ignore') as f:
 				contents = f.readlines()
-				file_name = location.split('/')[-1]
+				file_name = os.path.basename(location)
 				for line in contents:
 					# if (re.search(r'//', line) or re.search(r'#', line) 
 					# and not re.search(r'#include', line) and not re.search(r'#ifndef', line)
 					# and not re.search(r'#endif', line) and not re.search(r'#define', line)):
 					#line = str(line)
-					comment_search_c = re.search('//(.*)\n', line, re.IGNORECASE)
-					comment_search_c1 = re.search("/\*(.*)\*", line, re.IGNORECASE)
+					comment_search_c = re.search(r'//(.*)\n', line, re.IGNORECASE)
+					comment_search_c1 = re.search(r"/\*(.*)\*", line, re.IGNORECASE)
 					if comment_search_c:
 						comment = comment_search_c.group(1)
 						comments_c.append(comment)
@@ -80,8 +94,8 @@ def extract_source_code_comments_c(comments_file_location):
 						comment = comment_search_c1.group(1)
 						comments_c.append(comment)
 						data[file_name]=comments_c
-		except UnicodeDecodeError:
-			pass # Found non-text data
+		except Exception as e:
+			print(f"Error reading {location}: {e}")
 	return data
 
 ######################################
@@ -92,26 +106,28 @@ def extract_source_code_comments_p(comments_file_location):
 	# iterate through .py files only
 	comments_file_location = [s for s in comments_file_location if ".py" in s]
 	for location in comments_file_location:
+		if not os.path.exists(location):
+			continue
 		comments_p = []
 		try:
-			with open(location, "r") as f:
+			with open(location, "r", encoding='utf-8', errors='ignore') as f:
 				contents = f.readlines() 
-				file_name = location.split('/')[-1]
+				file_name = os.path.basename(location)
 				for line in contents:
 					#line = str(line)
-					comment_search_p = re.search('#(.*)\n', line, re.IGNORECASE)
-					comment_search_p1 = re.search('#ifndef(.*)\n', line, re.IGNORECASE)
-					comment_search_p2 = re.search('#define(.*)\n', line, re.IGNORECASE)
-					comment_search_p3 = re.search('#include(.*)\n', line, re.IGNORECASE)
-					comment_search_p4 = re.search('#endif(.*)\n', line, re.IGNORECASE)
-					comment_search_p5 = re.search('#ifdef(.*)\n', line, re.IGNORECASE)
+					comment_search_p = re.search(r'#(.*)\n', line, re.IGNORECASE)
+					comment_search_p1 = re.search(r'#ifndef(.*)\n', line, re.IGNORECASE)
+					comment_search_p2 = re.search(r'#define(.*)\n', line, re.IGNORECASE)
+					comment_search_p3 = re.search(r'#include(.*)\n', line, re.IGNORECASE)
+					comment_search_p4 = re.search(r'#endif(.*)\n', line, re.IGNORECASE)
+					comment_search_p5 = re.search(r'#ifdef(.*)\n', line, re.IGNORECASE)
 					if (comment_search_p and not comment_search_p1 and not comment_search_p2
 						and not comment_search_p3 and not comment_search_p4 and not comment_search_p5):
 						comment = comment_search_p.group(1)
 						comments_p.append(comment)
 						data[file_name]=comments_p
-		except UnicodeDecodeError:
-			pass # Found non-text data
+		except Exception as e:
+			print(f"Error reading {location}: {e}")
 	return data
 
 ######################################

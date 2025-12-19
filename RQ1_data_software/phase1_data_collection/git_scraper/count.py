@@ -11,16 +11,10 @@ def no_blank(fd):
     except:
         return
 
-columns = defaultdict(list)
-with open('Repos_all.csv') as f:
-	reader = csv.DictReader(no_blank(f))
-	for row in reader:
-		for (k,v) in row.items(): 
-			columns[k].append(v)
+with open('8_github_with_launch_files.json') as f:
+	repos_data = json.load(f)
 
-while '' in columns['URL']:
-    columns['URL'].remove('')
-#print(columns['URL'])
+urls = [repo['html_url'] for repo in repos_data if 'html_url' in repo and repo['html_url']]
 
 with open('data2/github-closed-pr-final_data.json') as f:
     d = json.load(f)
