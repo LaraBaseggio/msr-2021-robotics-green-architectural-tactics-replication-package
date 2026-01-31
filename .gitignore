@@ -129,3 +129,6 @@ dmypy.json
 .pyre/
 
 mongodb-credentials.txt
+
+RQ1_data_software/phase1_data_collection/data/rosa_new_data.json
+RQ1_data_software/phase1_data_collection/data/rosa_new_stats.json

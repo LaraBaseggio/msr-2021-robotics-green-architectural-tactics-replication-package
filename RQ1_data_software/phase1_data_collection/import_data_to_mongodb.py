@@ -4,12 +4,18 @@ import json
 import os
 from pathlib import Path
 
-username = os.getenv("MONGO_USER")
-password = os.getenv("MONGO_PASSWORD")
+# VM MongoDB connection
+MONGO_HOST = "145.108.225.21"
+MONGO_PORT = 26452
+MONGO_USER = "user"
+MONGO_PASSWORD = os.getenv("MONGO_PASSWORD", "goGreenS2!2025")
+MONGO_AUTH_DB = "admin"
+MONGO_DATABASE = "admin"
+
 MONGO_URI = (
-    f"mongodb+srv://{username}:{password}"
-    "@ros-data.ujsrakb.mongodb.net/data_phase1"
-    "?ssl=true&ssl_cert_reqs=CERT_NONE"
+    f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}"
+    f"@{MONGO_HOST}:{MONGO_PORT}/"
+    f"{MONGO_DATABASE}?authSource={MONGO_AUTH_DB}"
 )
 
 # File to collection mapping
@@ -94,7 +100,7 @@ def main():
     print("Connecting to MongoDB...")
     try:
         client = MongoClient(MONGO_URI)
-        db = client.data_phase1
+        db = client[MONGO_DATABASE] 
         # Test connection
         client.admin.command('ping')
         print("Connected successfully\n")
