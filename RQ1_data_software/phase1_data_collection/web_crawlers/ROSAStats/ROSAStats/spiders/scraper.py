@@ -8,7 +8,7 @@ class RosaBatchSpider(scrapy.Spider):
     name = "rosa_batch"
     allowed_domains = ["api.stackexchange.com"]
 
-    API_KEY = "rl_u8yNRWLcWXZVUvFgQCyGt7GMy"
+    API_KEY = "your-api-key"
     MAX_BATCH_SIZE = 100 
 
     custom_settings = {

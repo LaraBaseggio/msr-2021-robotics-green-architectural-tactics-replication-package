@@ -8,7 +8,7 @@ class ROSASpider(scrapy.Spider):
     name = "ros-answers"
     allowed_domains = ["api.stackexchange.com"]
 
-    API_KEY = "rl_u8yNRWLcWXZVUvFgQCyGt7GMy"  # optional
+    API_KEY = "your-api-key"  # optional
     BASE_URL = (
         "https://api.stackexchange.com/2.3/questions?"
         "order=desc&sort=creation&site=robotics&pagesize=100&page={page}"

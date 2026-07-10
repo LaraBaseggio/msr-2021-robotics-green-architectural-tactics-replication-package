@@ -9,7 +9,7 @@ class SOSpider(scrapy.Spider):
     allowed_domains = ["api.stackexchange.com"]
     
     # Stack Exchange API key
-    api_key = "rl_mYeNdX7JokG4xEpsM3PNhvSm1"
+    API_KEY = "your-api-key"
     
     spider_dir = os.path.dirname(os.path.abspath(__file__))
     json_path = os.path.join(spider_dir, '../../../../data/stackoverflow_new_data.json')

@@ -14,7 +14,7 @@ class SOSpider(scrapy.Spider):
     name = "stackoverflow"
     allowed_domains = ["api.stackexchange.com"]
 
-    api_key = "rl_mYeNdX7JokG4xEpsM3PNhvSm1"
+    API_KEY = "your-api-key"
     
     start_urls = [
         f"https://api.stackexchange.com/2.3/questions?order=desc&sort=creation&tagged=ros&site=stackoverflow&pagesize=100&filter=withbody&key={api_key}"
